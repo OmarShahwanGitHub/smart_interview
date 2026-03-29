@@ -7,7 +7,8 @@ python-dotenv==1.0.1
 
 # RAG Dependencies
 groq==0.13.0
-chromadb==0.6.6
+openai>=1.0.0
+chromadb==0.6.3
 pdfplumber==0.11.4
 
 # TTS Dependencies
@@ -15,7 +16,7 @@ requests==2.32.3
 
 # ASL Dependencies
 opencv-python==4.11.0.86
-mediapipe==0.10.20
+mediapipe==0.10.30
 numpy==1.26.4
 scikit-learn==1.6.1
 
