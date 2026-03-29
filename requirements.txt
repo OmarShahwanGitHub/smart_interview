@@ -1,0 +1,14 @@
+streamlit
+groq
+chromadb
+pdfplumber
+python-dotenv
+requests
+beautifulsoup4
+mediapipe
+opencv-python
+streamlit-webrtc
+av
+scikit-learn
+elevenlabs
+PyPDF2

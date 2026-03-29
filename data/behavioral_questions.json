@@ -1,0 +1,356 @@
+{
+  "source": "merged: multi-source scrape + curated (behavioral interview questions, tech jobs)",
+  "total": 50,
+  "questions": [
+    {
+      "id": 1,
+      "question": "Tell me about yourself.",
+      "category": "general",
+      "difficulty": "beginner",
+      "star_method": false
+    },
+    {
+      "id": 2,
+      "question": "Tell me about a time you faced a significant challenge at work and how you overcame it.",
+      "category": "problem_solving",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 3,
+      "question": "Describe a situation where you had to work with a difficult team member. How did you handle it?",
+      "category": "conflict_resolution",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 4,
+      "question": "Give me an example of a time you showed leadership.",
+      "category": "leadership",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 5,
+      "question": "Tell me about a time you failed. What did you learn from it?",
+      "category": "failure_and_learning",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 6,
+      "question": "Describe a project you are most proud of.",
+      "category": "achievement",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 7,
+      "question": "Tell me about a time you had to meet a tight deadline.",
+      "category": "time_management",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 8,
+      "question": "Give me an example of a time you had to adapt to a major change.",
+      "category": "adaptability",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 9,
+      "question": "Tell me about a time you disagreed with your manager. How did you handle it?",
+      "category": "conflict_resolution",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 10,
+      "question": "Describe a situation where you had to prioritize multiple tasks at once.",
+      "category": "prioritization",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 11,
+      "question": "Tell me about a time you went above and beyond for a customer or user.",
+      "category": "achievement",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 12,
+      "question": "Give me an example of a goal you set and how you achieved it.",
+      "category": "achievement",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 13,
+      "question": "Describe a situation where you received critical feedback. How did you respond?",
+      "category": "failure_and_learning",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 14,
+      "question": "Tell me about a time you collaborated with a cross-functional team.",
+      "category": "teamwork",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 15,
+      "question": "Give me an example of a creative solution you came up with to solve a problem.",
+      "category": "problem_solving",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 16,
+      "question": "Tell me about a time you had to make a decision with incomplete information.",
+      "category": "problem_solving",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 17,
+      "question": "Describe a situation where you had to influence someone without direct authority.",
+      "category": "communication",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 18,
+      "question": "Tell me about a time you identified a problem before it became critical.",
+      "category": "problem_solving",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 19,
+      "question": "Give me an example of how you handle conflict on a team.",
+      "category": "conflict_resolution",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 20,
+      "question": "Tell me about a time you mentored or coached a colleague.",
+      "category": "leadership",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 21,
+      "question": "Describe a project where you had to manage ambiguity.",
+      "category": "adaptability",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 22,
+      "question": "Tell me about a time you had to deliver bad news to a stakeholder.",
+      "category": "communication",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 23,
+      "question": "Describe a situation where you made a mistake and how you corrected it.",
+      "category": "failure_and_learning",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 24,
+      "question": "Tell me about a time you had to persuade someone to see your point of view.",
+      "category": "communication",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 25,
+      "question": "Tell me about a time you had to balance quality versus speed in your work.",
+      "category": "prioritization",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 26,
+      "question": "Tell me about a time when you had to make an ethical decision at work.",
+      "category": "ethics",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 27,
+      "question": "Tell me about your greatest professional achievement.",
+      "category": "achievement",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 28,
+      "question": "Give me an example of a time you took initiative without being asked.",
+      "category": "leadership",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 29,
+      "question": "Tell me about a time you worked in a fast-paced environment.",
+      "category": "adaptability",
+      "difficulty": "beginner",
+      "star_method": true
+    },
+    {
+      "id": 30,
+      "question": "Describe a situation where you had to be honest about something difficult.",
+      "category": "ethics",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 31,
+      "question": "Describe a situation where you had to make an unpopular decision.",
+      "category": "leadership",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 32,
+      "question": "Tell me about a time you successfully managed a project from start to finish.",
+      "category": "achievement",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 33,
+      "question": "Tell me about a time you took a calculated risk.",
+      "category": "problem_solving",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 34,
+      "question": "Describe how you stay motivated when working on repetitive tasks.",
+      "category": "motivation",
+      "difficulty": "beginner",
+      "star_method": false
+    },
+    {
+      "id": 35,
+      "question": "Tell me about a time you had to quickly gain domain knowledge in an unfamiliar area.",
+      "category": "adaptability",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 36,
+      "question": "Give me an example of how you manage your time when you have competing deadlines.",
+      "category": "time_management",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 37,
+      "question": "Tell me about a situation where you had to negotiate a compromise.",
+      "category": "conflict_resolution",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 38,
+      "question": "Describe a time when you had to step outside your comfort zone at work.",
+      "category": "adaptability",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 39,
+      "question": "Give me an example of a time your communication skills helped resolve a problem.",
+      "category": "communication",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 40,
+      "question": "Tell me about a time you contributed to improving team culture.",
+      "category": "teamwork",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 41,
+      "question": "Where do you see yourself in five years, and how does this role fit that vision?",
+      "category": "motivation",
+      "difficulty": "beginner",
+      "star_method": false
+    },
+    {
+      "id": 42,
+      "question": "Tell me about a time you had to learn a new technology or tool quickly to complete a project.",
+      "category": "adaptability",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 43,
+      "question": "Describe a situation where you successfully onboarded or trained a new team member.",
+      "category": "teamwork",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 44,
+      "question": "Give me an example of a time you used data or metrics to drive a decision.",
+      "category": "problem_solving",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 45,
+      "question": "Tell me about a time your project scope changed significantly mid-way. How did you respond?",
+      "category": "adaptability",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 46,
+      "question": "Describe a time when you proactively shared knowledge that benefited your team.",
+      "category": "teamwork",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 47,
+      "question": "Give me an example of a time you had to work with someone whose work style was very different from yours.",
+      "category": "conflict_resolution",
+      "difficulty": "intermediate",
+      "star_method": true
+    },
+    {
+      "id": 48,
+      "question": "Tell me about a time you had to defend a technical decision to non-technical stakeholders.",
+      "category": "communication",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 49,
+      "question": "Describe a time you reduced technical debt or improved code quality in a meaningful way.",
+      "category": "problem_solving",
+      "difficulty": "advanced",
+      "star_method": true
+    },
+    {
+      "id": 50,
+      "question": "Give me an example of a time you volunteered for a task that was outside your job description.",
+      "category": "leadership",
+      "difficulty": "intermediate",
+      "star_method": true
+    }
+  ]
+}
