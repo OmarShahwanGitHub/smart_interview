@@ -1,7 +1,0 @@
-streamlit
-groq
-chromadb
-pdfplumber
-python-dotenv
-requests
-beautifulsoup4
