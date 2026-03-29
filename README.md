@@ -32,107 +32,50 @@ Smart Interview reads your resume and conducts a real mock interview — asking 
 
 ## System Architecture
 
-```mermaid
-graph LR
-
-    %% ── USER ENTRY ──────────────────────────────────────────────
-    USER(["👤 User"])
-
-    subgraph FRONTEND["🖥️  Frontend  ·  Next.js 15 + TypeScript"]
-        direction TB
-        LP["Landing Page"]
-        AUTH["Login / Signup"]
-        SETUP["Setup\n───────────\nResume Upload\nLanguage Select"]
-        DASH["Dashboard"]
-
-        subgraph MODES["Interview Modes"]
-            direction TB
-            ENG["🎤 English\nVoice Interview"]
-            ESP["🌎 Spanish\nVoice Interview"]
-            ASL_UI["🤟 ASL\nCamera Interview"]
-        end
-
-        SCREEN_PAGE["📄 Resume\nScreening"]
-    end
-
-    subgraph SUPA_DB["🗄️  Supabase"]
-        direction TB
-        SUPA_AUTH["Auth\n(email / password)"]
-        SUPA_DB2["PostgreSQL\nprofiles · preferences"]
-    end
-
-    subgraph BACKEND["⚙️  FastAPI Backend  ·  Python 3.13"]
-        direction TB
-        EP_PARSE["POST /parse-resume\npdfplumber"]
-        EP_GENQ["POST /generate-questions\nGroq LLaMA 3.3 70B"]
-        EP_PROC["POST /interview/process\nRAG follow-up"]
-        EP_TTS["POST /tts\nElevenLabs"]
-        EP_ASL["POST /asl/process-frame"]
-        EP_SCREEN["POST /screen-resume\n4× ML Models"]
-    end
-
-    subgraph RAG["🧠  RAG Pipeline"]
-        direction LR
-        CHUNKS["Section-Aware\nChunker"]
-        EMBED["MiniLM\nEmbeddings"]
-        CHROMA["ChromaDB\nVectorstore"]
-        LLM["Groq\nLLaMA 3.3 70B"]
-        CHUNKS --> EMBED --> CHROMA
-        CHROMA -->|context retrieval| LLM
-    end
-
-    subgraph ASL_PIPE["🤟  ASL Pipeline"]
-        direction LR
-        MP["MediaPipe\nHand Landmarks"]
-        CLF["RandomForest\nSign Classifier"]
-        BUF["Letter Buffer\nWord Assembly"]
-        MP --> CLF --> BUF
-    end
-
-    subgraph VOICE["🔊  Voice Layer"]
-        direction TB
-        SPEECH["Web Speech API\nen-US / es-ES"]
-        ELEVEN["ElevenLabs TTS\nmultilingual v2"]
-    end
-
-    %% ── CONNECTIONS ─────────────────────────────────────────────
-
-    USER --> LP --> AUTH
-    AUTH <--> SUPA_AUTH
-    AUTH --> SETUP --> DASH
-
-    SETUP -->|PDF upload| EP_PARSE --> CHUNKS
-    SETUP -->|language pref| SUPA_DB2
-
-    DASH --> MODES
-    DASH --> SCREEN_PAGE
-
-    ENG -->|speech input| SPEECH
-    ESP -->|speech input| SPEECH
-    SPEECH -->|transcript| EP_PROC
-
-    ENG -->|questions| EP_GENQ
-    ESP -->|questions| EP_GENQ
-    EP_GENQ --> LLM
-
-    EP_PROC --> LLM
-    EP_PROC -->|audio| EP_TTS --> ELEVEN
-    ELEVEN -->|spoken question| ENG
-    ELEVEN -->|spoken question| ESP
-
-    ASL_UI -->|camera frames| EP_ASL --> MP
-    BUF -->|signed text| EP_PROC
-
-    SCREEN_PAGE -->|chunks| EP_SCREEN
-
-    %% ── STYLES ──────────────────────────────────────────────────
-    style FRONTEND  fill:#1e1b4b,stroke:#6366f1,color:#e0e7ff
-    style BACKEND   fill:#052e16,stroke:#22c55e,color:#dcfce7
-    style RAG       fill:#1c1917,stroke:#f97316,color:#ffedd5
-    style ASL_PIPE  fill:#0f172a,stroke:#34d399,color:#d1fae5
-    style VOICE     fill:#1e1a2e,stroke:#8b5cf6,color:#ede9fe
-    style SUPA_DB   fill:#0f172a,stroke:#38bdf8,color:#e0f2fe
-    style MODES     fill:#2d1f4e,stroke:#a78bfa,color:#ede9fe
+```
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║                        🖥️  FRONTEND  —  Next.js 15 + TypeScript                     ║
+║                                                                                      ║
+║   Landing Page  ──►  Login / Signup  ──►  Setup (Resume + Language)  ──►  Dashboard ║
+║                                                                                      ║
+║          ┌─────────────────────┬──────────────────────┬─────────────────────┐       ║
+║          │  🎤 English Voice   │  🌎 Spanish Voice    │  🤟 ASL Camera      │       ║
+║          │  Web Speech API     │  Web Speech API      │  MediaStream API    │       ║
+║          │  (en-US)            │  (es-ES)             │  Camera Frames      │       ║
+║          └────────┬────────────┴──────────┬───────────┴──────────┬──────────┘       ║
+║                   │                       │                       │                  ║
+╚═══════════════════╪═══════════════════════╪═══════════════════════╪══════════════════╝
+                    │  transcript           │  transcript           │  base64 frames
+                    ▼                       ▼                       ▼
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║                        ⚙️  BACKEND  —  FastAPI + Python 3.13                        ║
+║                                                                                      ║
+║   POST /parse-resume        POST /generate-questions     POST /interview/process     ║
+║   ─────────────────         ─────────────────────────    ──────────────────────────  ║
+║   pdfplumber                Groq LLaMA 3.3 70B           RAG context retrieval       ║
+║   Section chunking          8 technical questions        Groq follow-up generation   ║
+║   → ChromaDB                5 behavioral questions       → ElevenLabs TTS            ║
+║                                                                                      ║
+║   POST /asl/process-frame   POST /screen-resume          POST /tts                  ║
+║   ──────────────────────    ────────────────────         ─────────────────           ║
+║   MediaPipe landmarks       4× RandomForest models       ElevenLabs API              ║
+║   RandomForest classifier   Category prediction          multilingual v2             ║
+║   Letter buffer → word      Job recommendation           turbo v2 (English)          ║
+║                             Skills + education                                       ║
+╚══════════╤═══════════════════════════╤══════════════════════════╤═════════════════════╝
+           │                           │                          │
+           ▼                           ▼                          ▼
+╔══════════════════╗     ╔═════════════════════════╗     ╔═════════════════════╗
+║  🧠 RAG Pipeline  ║     ║  🗄️  Supabase           ║     ║  🔊 ElevenLabs      ║
+║                  ║     ║                         ║     ║                     ║
+║  pdfplumber      ║     ║  PostgreSQL             ║     ║  Speaks questions   ║
+║      ↓           ║     ║  User profiles          ║     ║  aloud in EN + ES   ║
+║  MiniLM embed    ║     ║  Language preferences   ║     ║                     ║
+║      ↓           ║     ║                         ║     ║  multilingual v2    ║
+║  ChromaDB store  ║     ║  Auth (email/password)  ║     ║  for Spanish        ║
+║      ↓           ║     ║  Session persistence    ║     ║  turbo v2           ║
+║  Groq LLaMA 70B  ║     ║                         ║     ║  for English        ║
+╚══════════════════╝     ╚═════════════════════════╝     ╚═════════════════════╝
 ```
 
 ---
