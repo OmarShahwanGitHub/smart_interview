@@ -34,15 +34,15 @@ Smart Interview reads your resume and conducts a real mock interview — asking 
 
 ```
 ╔════════════════════════════════════════════════════════════════════════════════════════════╗
-║                      FRONTEND  --  Next.js 15 + TypeScript                                ║
+║                      FRONTEND  --  Next.js 15 + TypeScript                                 ║
 ║                                                                                            ║
-║   Landing Page  -->  Login / Signup  -->  Setup (Resume + Language)  -->  Dashboard       ║
+║   Landing Page  -->  Login / Signup  -->  Setup (Resume + Language)  -->  Dashboard        ║
 ║                                                                                            ║
-║        +──────────────────────+──────────────────────+──────────────────────+             ║
-║        |   English Voice      |   Spanish Voice      |   ASL Camera         |             ║
-║        |   Web Speech API     |   Web Speech API     |   MediaStream API    |             ║
-║        |   en-US              |   es-ES              |   Camera Frames      |             ║
-║        +─────────┬────────────+──────────┬───────────+──────────┬───────────+             ║
+║        +──────────────────────+──────────────────────+──────────────────────+              ║
+║        |   English Voice      |   Spanish Voice      |   ASL Camera         |              ║
+║        |   Web Speech API     |   Web Speech API     |   MediaStream API    |              ║
+║        |   en-US              |   es-ES              |   Camera Frames      |              ║
+║        +─────────┬────────────+──────────┬───────────+──────────┬───────────+              ║
 ║                  |                       |                      |                          ║
 ╚══════════════════╪═══════════════════════╪══════════════════════╪══════════════════════════╝
                    |  transcript           |  transcript          |  base64 frames
@@ -51,16 +51,16 @@ Smart Interview reads your resume and conducts a real mock interview — asking 
 ║                      BACKEND  --  FastAPI + Python 3.13                                    ║
 ║                                                                                            ║
 ║   POST /parse-resume         POST /generate-questions    POST /interview/process           ║
-║   ───────────────────        ──────────────────────────  ─────────────────────────        ║
+║   ───────────────────        ──────────────────────────  ─────────────────────────         ║
 ║   pdfplumber                 Groq LLaMA 3.3 70B          RAG context retrieval             ║
 ║   Section-aware chunking     8 technical questions       Groq follow-up generation         ║
 ║   Store in ChromaDB          5 behavioral questions      Speak via ElevenLabs TTS          ║
 ║                                                                                            ║
-║   POST /asl/process-frame    POST /screen-resume         POST /tts                        ║
-║   ────────────────────────   ──────────────────────      ─────────────────                ║
-║   MediaPipe hand landmarks   4x RandomForest models      ElevenLabs API                   ║
-║   RandomForest classifier    Category prediction         multilingual v2 (ES)             ║
-║   Letter buffer --> word     Job recommendation          turbo v2 (EN)                    ║
+║   POST /asl/process-frame    POST /screen-resume         POST /tts                         ║
+║   ────────────────────────   ──────────────────────      ─────────────────                 ║
+║   MediaPipe hand landmarks   4x RandomForest models      ElevenLabs API                    ║
+║   RandomForest classifier    Category prediction         multilingual v2 (ES)              ║
+║   Letter buffer --> word     Job recommendation          turbo v2 (EN)                     ║
 ║                              Skills + education                                            ║
 ╚═══════════════╤══════════════════════════╤══════════════════════╤══════════════════════════╝
                 |                          |                      |
