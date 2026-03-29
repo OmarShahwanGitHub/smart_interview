@@ -2,18 +2,6 @@
 
 This guide explains exactly what each API route needs to do and how to implement it.
 
-## Environment Variables
-
-**All environment variables are in the root `.env` file:**
-
-```env
-RAG_API=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
-ELEVEN_API=sk_c3717308f6b466c42ebcca4baf81e1fa3b60c361b7a82bec
-NEXT_PUBLIC_SUPABASE_URL=https://karmrtgjvxlyesvlpahg.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
 The frontend automatically reads `NEXT_PUBLIC_*` variables from this file.
 
 ---
