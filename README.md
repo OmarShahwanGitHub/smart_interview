@@ -33,49 +33,50 @@ Smart Interview reads your resume and conducts a real mock interview — asking 
 ## System Architecture
 
 ```
-╔══════════════════════════════════════════════════════════════════════════════════════╗
-║                        🖥️  FRONTEND  —  Next.js 15 + TypeScript                     ║
-║                                                                                      ║
-║   Landing Page  ──►  Login / Signup  ──►  Setup (Resume + Language)  ──►  Dashboard ║
-║                                                                                      ║
-║          ┌─────────────────────┬──────────────────────┬─────────────────────┐       ║
-║          │  🎤 English Voice   │  🌎 Spanish Voice    │  🤟 ASL Camera      │       ║
-║          │  Web Speech API     │  Web Speech API      │  MediaStream API    │       ║
-║          │  (en-US)            │  (es-ES)             │  Camera Frames      │       ║
-║          └────────┬────────────┴──────────┬───────────┴──────────┬──────────┘       ║
-║                   │                       │                       │                  ║
-╚═══════════════════╪═══════════════════════╪═══════════════════════╪══════════════════╝
-                    │  transcript           │  transcript           │  base64 frames
-                    ▼                       ▼                       ▼
-╔══════════════════════════════════════════════════════════════════════════════════════╗
-║                        ⚙️  BACKEND  —  FastAPI + Python 3.13                        ║
-║                                                                                      ║
-║   POST /parse-resume        POST /generate-questions     POST /interview/process     ║
-║   ─────────────────         ─────────────────────────    ──────────────────────────  ║
-║   pdfplumber                Groq LLaMA 3.3 70B           RAG context retrieval       ║
-║   Section chunking          8 technical questions        Groq follow-up generation   ║
-║   → ChromaDB                5 behavioral questions       → ElevenLabs TTS            ║
-║                                                                                      ║
-║   POST /asl/process-frame   POST /screen-resume          POST /tts                  ║
-║   ──────────────────────    ────────────────────         ─────────────────           ║
-║   MediaPipe landmarks       4× RandomForest models       ElevenLabs API              ║
-║   RandomForest classifier   Category prediction          multilingual v2             ║
-║   Letter buffer → word      Job recommendation           turbo v2 (English)          ║
-║                             Skills + education                                       ║
-╚══════════╤═══════════════════════════╤══════════════════════════╤═════════════════════╝
-           │                           │                          │
-           ▼                           ▼                          ▼
-╔══════════════════╗     ╔═════════════════════════╗     ╔═════════════════════╗
-║  🧠 RAG Pipeline  ║     ║  🗄️  Supabase           ║     ║  🔊 ElevenLabs      ║
-║                  ║     ║                         ║     ║                     ║
-║  pdfplumber      ║     ║  PostgreSQL             ║     ║  Speaks questions   ║
-║      ↓           ║     ║  User profiles          ║     ║  aloud in EN + ES   ║
-║  MiniLM embed    ║     ║  Language preferences   ║     ║                     ║
-║      ↓           ║     ║                         ║     ║  multilingual v2    ║
-║  ChromaDB store  ║     ║  Auth (email/password)  ║     ║  for Spanish        ║
-║      ↓           ║     ║  Session persistence    ║     ║  turbo v2           ║
-║  Groq LLaMA 70B  ║     ║                         ║     ║  for English        ║
-╚══════════════════╝     ╚═════════════════════════╝     ╚═════════════════════╝
+════════════════════════════════════════════════════════════════════════
+  FRONTEND  —  Next.js 15 + TypeScript
+
+  Landing Page  -->  Login / Signup  -->  Setup (Resume + Language)  -->  Dashboard
+
+     +----------------------+----------------------+----------------------+
+     |   English Voice      |   Spanish Voice      |   ASL Camera         |
+     |   Web Speech API     |   Web Speech API     |   MediaStream API    |
+     |   (en-US)            |   (es-ES)            |   Camera Frames      |
+     +----------+-----------+----------+-----------+----------+-----------+
+                |                      |                      |
+════════════════╪══════════════════════╪══════════════════════╪════════════
+                | transcript           | transcript           | base64 frames
+                v                      v                      v
+════════════════════════════════════════════════════════════════════════
+  BACKEND  —  FastAPI + Python 3.13
+
+  POST /parse-resume          POST /generate-questions    POST /interview/process
+  --------------------        ------------------------    -----------------------
+  pdfplumber                  Groq LLaMA 3.3 70B          RAG context retrieval
+  Section-aware chunking      8 technical questions       Groq follow-up generation
+  --> ChromaDB                5 behavioral questions      --> ElevenLabs TTS
+
+  POST /asl/process-frame     POST /screen-resume         POST /tts
+  -----------------------     -------------------         ---------
+  MediaPipe hand landmarks    4x RandomForest models      ElevenLabs API
+  RandomForest classifier     Category prediction         multilingual v2 (ES)
+  Letter buffer --> word      Job recommendation          turbo v2 (EN)
+                              Skills + education
+
+════════════╤═══════════════════════════╤══════════════════════╤═════════
+            |                           |                      |
+            v                           v                      v
+  ══════════════════     ═══════════════════════     ══════════════════
+  RAG Pipeline           Supabase                    ElevenLabs TTS
+
+  pdfplumber             PostgreSQL                  Speaks questions
+       |                 User profiles               aloud in EN + ES
+  MiniLM embeddings      Language preferences
+       |                                             multilingual v2
+  ChromaDB store         Auth (email/password)       for Spanish
+       |                 Session persistence         turbo v2
+  Groq LLaMA 70B                                     for English
+  ══════════════════     ═══════════════════════     ══════════════════
 ```
 
 ---
