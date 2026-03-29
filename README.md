@@ -33,84 +33,106 @@ Smart Interview reads your resume and conducts a real mock interview — asking 
 ## System Architecture
 
 ```mermaid
-graph TB
-    subgraph Client["🖥️ Browser (Next.js 15 + TypeScript)"]
-        LP[Landing Page]
-        AUTH[Auth — Supabase]
-        SETUP[Setup Page\nResume Upload + Language]
-        DASH[Dashboard]
-        INTERVIEW[Interview Page\nVoiceInterviewUI]
-        SCREEN[Screen Page\nResume Analysis]
-        ASL_UI[ASL Interview UI\nCamera + Hand Overlay]
+graph LR
+
+    %% ── USER ENTRY ──────────────────────────────────────────────
+    USER(["👤 User"])
+
+    subgraph FRONTEND["🖥️  Frontend  ·  Next.js 15 + TypeScript"]
+        direction TB
+        LP["Landing Page"]
+        AUTH["Login / Signup"]
+        SETUP["Setup\n───────────\nResume Upload\nLanguage Select"]
+        DASH["Dashboard"]
+
+        subgraph MODES["Interview Modes"]
+            direction TB
+            ENG["🎤 English\nVoice Interview"]
+            ESP["🌎 Spanish\nVoice Interview"]
+            ASL_UI["🤟 ASL\nCamera Interview"]
+        end
+
+        SCREEN_PAGE["📄 Resume\nScreening"]
     end
 
-    subgraph Input["🎤 Input Layer"]
-        MIC[Web Speech API\nEN / ES]
-        CAM[MediaStream API\nCamera Frames]
-        PDF[PDF File Upload]
+    subgraph SUPA_DB["🗄️  Supabase"]
+        direction TB
+        SUPA_AUTH["Auth\n(email / password)"]
+        SUPA_DB2["PostgreSQL\nprofiles · preferences"]
     end
 
-    subgraph Backend["⚙️ FastAPI Backend"]
-        PARSE["/parse-resume\npdfplumber"]
-        GENQ["/generate-questions\nGroq LLaMA 3.3 70B"]
-        PROC["/interview/process\nRAG Follow-up"]
-        TTS_EP["/tts\nElevenLabs"]
-        ASL_EP["/asl/process-frame\nMediaPipe + RandomForest"]
-        SCREEN_EP["/screen-resume\n4x ML Models"]
+    subgraph BACKEND["⚙️  FastAPI Backend  ·  Python 3.13"]
+        direction TB
+        EP_PARSE["POST /parse-resume\npdfplumber"]
+        EP_GENQ["POST /generate-questions\nGroq LLaMA 3.3 70B"]
+        EP_PROC["POST /interview/process\nRAG follow-up"]
+        EP_TTS["POST /tts\nElevenLabs"]
+        EP_ASL["POST /asl/process-frame"]
+        EP_SCREEN["POST /screen-resume\n4× ML Models"]
     end
 
-    subgraph RAG["🧠 RAG Pipeline"]
-        CHUNKS[Section-Aware\nChunking]
-        CHROMA[ChromaDB\nIn-Memory Vectorstore]
-        EMBED[MiniLM\nEmbeddings]
-        LLM[Groq\nLLaMA 3.3 70B]
+    subgraph RAG["🧠  RAG Pipeline"]
+        direction LR
+        CHUNKS["Section-Aware\nChunker"]
+        EMBED["MiniLM\nEmbeddings"]
+        CHROMA["ChromaDB\nVectorstore"]
+        LLM["Groq\nLLaMA 3.3 70B"]
+        CHUNKS --> EMBED --> CHROMA
+        CHROMA -->|context retrieval| LLM
     end
 
-    subgraph ASL_PIPE["🤟 ASL Pipeline"]
-        MP[MediaPipe\nHand Landmarks]
-        CLF[RandomForest\nSign Classifier]
-        BUF[Letter Buffer\nWord Assembly]
+    subgraph ASL_PIPE["🤟  ASL Pipeline"]
+        direction LR
+        MP["MediaPipe\nHand Landmarks"]
+        CLF["RandomForest\nSign Classifier"]
+        BUF["Letter Buffer\nWord Assembly"]
+        MP --> CLF --> BUF
     end
 
-    subgraph Voice["🔊 Voice Layer"]
-        ELEVEN[ElevenLabs\neleven_multilingual_v2]
-        SPEECH[Browser\nSpeech Recognition]
+    subgraph VOICE["🔊  Voice Layer"]
+        direction TB
+        SPEECH["Web Speech API\nen-US / es-ES"]
+        ELEVEN["ElevenLabs TTS\nmultilingual v2"]
     end
 
-    subgraph DB["🗄️ Data Layer"]
-        SUPA[Supabase\nPostgreSQL + Auth]
-        LS[localStorage\nResume Chunks]
-    end
+    %% ── CONNECTIONS ─────────────────────────────────────────────
 
-    LP --> AUTH
-    AUTH --> SUPA
-    SETUP --> PDF --> PARSE --> CHUNKS --> CHROMA
-    CHROMA --> EMBED
-    SETUP --> DASH
-    DASH --> INTERVIEW
-    DASH --> SCREEN
+    USER --> LP --> AUTH
+    AUTH <--> SUPA_AUTH
+    AUTH --> SETUP --> DASH
 
-    INTERVIEW --> MIC --> SPEECH
-    INTERVIEW --> GENQ --> LLM
-    INTERVIEW --> PROC --> CHROMA
-    PROC --> LLM
-    PROC --> TTS_EP --> ELEVEN
+    SETUP -->|PDF upload| EP_PARSE --> CHUNKS
+    SETUP -->|language pref| SUPA_DB2
 
-    INTERVIEW --> ASL_UI
-    CAM --> ASL_EP --> MP --> CLF --> BUF --> ASL_UI
+    DASH --> MODES
+    DASH --> SCREEN_PAGE
 
-    SCREEN --> SCREEN_EP
+    ENG -->|speech input| SPEECH
+    ESP -->|speech input| SPEECH
+    SPEECH -->|transcript| EP_PROC
 
-    CHUNKS --> LS
-    AUTH --> SUPA
+    ENG -->|questions| EP_GENQ
+    ESP -->|questions| EP_GENQ
+    EP_GENQ --> LLM
 
-    style Client fill:#1e1b4b,stroke:#6366f1,color:#e0e7ff
-    style Backend fill:#052e16,stroke:#22c55e,color:#dcfce7
-    style RAG fill:#1c1917,stroke:#f97316,color:#ffedd5
-    style ASL_PIPE fill:#0c0a09,stroke:#34d399,color:#d1fae5
-    style Voice fill:#1e1a2e,stroke:#8b5cf6,color:#ede9fe
-    style DB fill:#0f172a,stroke:#38bdf8,color:#e0f2fe
-    style Input fill:#1f1f1f,stroke:#94a3b8,color:#f1f5f9
+    EP_PROC --> LLM
+    EP_PROC -->|audio| EP_TTS --> ELEVEN
+    ELEVEN -->|spoken question| ENG
+    ELEVEN -->|spoken question| ESP
+
+    ASL_UI -->|camera frames| EP_ASL --> MP
+    BUF -->|signed text| EP_PROC
+
+    SCREEN_PAGE -->|chunks| EP_SCREEN
+
+    %% ── STYLES ──────────────────────────────────────────────────
+    style FRONTEND  fill:#1e1b4b,stroke:#6366f1,color:#e0e7ff
+    style BACKEND   fill:#052e16,stroke:#22c55e,color:#dcfce7
+    style RAG       fill:#1c1917,stroke:#f97316,color:#ffedd5
+    style ASL_PIPE  fill:#0f172a,stroke:#34d399,color:#d1fae5
+    style VOICE     fill:#1e1a2e,stroke:#8b5cf6,color:#ede9fe
+    style SUPA_DB   fill:#0f172a,stroke:#38bdf8,color:#e0f2fe
+    style MODES     fill:#2d1f4e,stroke:#a78bfa,color:#ede9fe
 ```
 
 ---
