@@ -21,7 +21,7 @@ import {
 
 const benefits = [
   "Save your resume-driven interview setup",
-  "Switch between English, Spanish, and ASL support",
+  "Switch between English, Spanish, and Arabic support",
   "Return to screening and mock sessions anytime",
 ];
 

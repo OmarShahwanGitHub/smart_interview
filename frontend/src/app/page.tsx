@@ -27,10 +27,10 @@ const interviewCards = [
     description: "Leadership stories, tradeoffs, prioritization, and stakeholder scenarios.",
   },
   {
-    label: "ASL Ready",
+    label: "Multilingual",
     company: "Support Specialist",
     accent: "from-green-400/30 via-lime-200/10 to-transparent",
-    description: "Inclusive interview practice with signing and speech-friendly flows.",
+    description: "Practice in English, Spanish, or Arabic with speech-friendly flows.",
   },
 ];
 
@@ -99,7 +99,7 @@ export default function Home() {
                   </h1>
                   <p className="max-w-3xl text-lg leading-8 text-muted-foreground sm:text-xl">
                     Upload your resume, choose a role, and get realistic questions with
-                    instant coaching across text, voice, and ASL-friendly practice
+                    instant coaching across text and voice-friendly practice
                     sessions.
                   </p>
                 </div>
@@ -107,7 +107,7 @@ export default function Home() {
                 <div className="grid gap-3 sm:grid-cols-3">
                   {[
                     "Resume-based questions tailored to your actual experience",
-                    "Voice, text, and ASL-friendly practice in one flow",
+                    "Voice and text practice in one flow",
                     "Fast switch from setup to screening to mock interviews",
                   ].map((item) => (
                     <div
@@ -204,7 +204,7 @@ export default function Home() {
                     {
                       icon: Video,
                       title: "Accessible practice",
-                      copy: "Train with text, speech, and ASL-aware experiences in one flow.",
+                      copy: "Train with text and speech experiences in one flow.",
                     },
                   ].map((item) => (
                     <div

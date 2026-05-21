@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
 
     const backendFormData = new FormData();
     backendFormData.append("file", file);
+    backendFormData.append("user_id", userId);
 
     const response = await fetch(`${pythonApiUrl}/parse-resume`, {
       method: "POST",
@@ -35,6 +36,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       fields: data.fields,
       chunks: data.chunks,
+      resume_id: data.resume_id,
     });
   } catch (error: any) {
     console.error("Error parsing resume:", error);

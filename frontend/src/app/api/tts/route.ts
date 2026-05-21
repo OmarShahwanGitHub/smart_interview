@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, language = "english" } = await request.json();
+    const {
+      text,
+      language = "english",
+      session_id,
+      user_id,
+      resume_id,
+      turn_id,
+      kind,
+      persist,
+    } = await request.json();
     if (!text?.trim()) {
       return NextResponse.json({ error: "text is required" }, { status: 400 });
     }
@@ -11,7 +20,16 @@ export async function POST(request: NextRequest) {
     const res = await fetch(`${apiUrl}/tts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, language }),
+      body: JSON.stringify({
+        text,
+        language,
+        session_id,
+        user_id,
+        resume_id,
+        turn_id,
+        kind,
+        persist,
+      }),
     });
 
     if (!res.ok) {

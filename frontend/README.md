@@ -1,6 +1,6 @@
 # Smart Interview - Frontend
 
-Next.js 15 frontend for the Smart Interview application. Provides a full-stack UI for AI-powered interview practice with support for English, Spanish, and American Sign Language.
+Next.js 15 frontend for the Smart Interview application. Provides a full-stack UI for AI-powered interview practice with support for English, Spanish, and Arabic.
 
 ## Tech Stack
 
@@ -72,8 +72,17 @@ All environment variables are in the **root `.env` file**:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 NEXT_PUBLIC_API_URL=http://localhost:8000
-RAG_API=your_groq_key
+LLM_PROVIDER=huggingface
+LLM_API_BASE=https://router.huggingface.co/v1
+LLM_MODEL=Qwen/Qwen2.5-7B-Instruct:fastest
+LLM_API_KEY=your_huggingface_token
 ELEVEN_API=your_elevenlabs_key
+MONGODB_URI=your_mongodb_atlas_uri
+MONGODB_DB=smart_interview
+S3_BUCKET=your_recordings_bucket
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=your_access_key
+S3_SECRET_ACCESS_KEY=your_secret_key
 ```
 
 The frontend automatically reads `NEXT_PUBLIC_*` variables from this file.
@@ -98,7 +107,7 @@ Visit [http://localhost:3000](http://localhost:3000)
 
 2. **User Onboarding**
    - Resume upload (PDF)
-   - Language selection (English/Spanish/ASL)
+   - Language selection (English/Spanish/Arabic)
    - Field detection display
    - Profile creation
 
@@ -109,9 +118,7 @@ Visit [http://localhost:3000](http://localhost:3000)
    - Start interview button
 
 4. **Interview Session**
-   - Camera permission request (ASL mode)
    - Microphone permission request (Voice mode)
-   - Real-time media stream display
    - Permission error handling
 
 5. **UI Components**
@@ -138,7 +145,6 @@ Your teammates need to implement:
 3. **Interview Logic** (`/api/interview`)
    - ElevenLabs TTS for question audio
    - Speech-to-text for voice responses
-   - ASL sign recognition integration
    - Follow-up question generation
    - Session data storage
 
@@ -176,7 +182,7 @@ Generates interview questions based on resume and field.
 {
   userId: string
   field: string
-  language: "english" | "spanish" | "asl"
+  language: "english" | "spanish" | "arabic"
 }
 ```
 
@@ -197,7 +203,7 @@ Processes interview responses and generates follow-ups.
   question: string
   answer: string
   userId: string
-  language: "english" | "spanish" | "asl"
+  language: "english" | "spanish" | "arabic"
 }
 ```
 
@@ -260,18 +266,10 @@ const response = await fetch(`${pythonApiUrl}/parse-resume`, {
 const { field, parsed_data } = await response.json();
 ```
 
-### Permissions API
+### Speech Input
 
-The interview page uses the modern Web APIs:
-
-```typescript
-navigator.mediaDevices.getUserMedia({
-  video: language === "asl",
-  audio: language !== "asl"
-})
-```
-
-Ensure HTTPS in production for permissions to work.
+The interview page uses the browser Speech Recognition API for optional answer dictation.
+Ensure HTTPS in production for microphone permissions to work.
 
 ## Deployment
 
@@ -298,7 +296,7 @@ NEXT_PUBLIC_API_URL=<python_backend_url>
 - Check root `.env` has correct Supabase credentials
 - Restart dev server after changing env vars
 
-### Camera/Microphone not working
+### Microphone not working
 - Use HTTPS (required for media permissions)
 - Check browser permissions
 - Ensure not blocked by browser policy
@@ -320,12 +318,7 @@ NEXT_PUBLIC_API_URL=<python_backend_url>
    - Generate audio for questions
    - Stream audio to frontend
 
-3. **ASL Recognition**
-   - Connect ASL classifier from `../asl/`
-   - Stream video frames to backend
-   - Display recognized text in real-time
-
-4. **Behavioral Questions**
+3. **Behavioral Questions**
    - Load from `../data/behavioral_questions.json`
    - Mix with technical questions
    - Implement question randomization
@@ -334,7 +327,6 @@ NEXT_PUBLIC_API_URL=<python_backend_url>
 
 This is the UI branch. Your teammates are working on:
 - **Backend APIs**: RAG, question generation, TTS
-- **ASL System**: Sign recognition, classifier
 - **Data**: Behavioral questions, resume parsing
 
 Coordinate integration points via the API routes.

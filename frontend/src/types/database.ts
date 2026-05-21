@@ -15,7 +15,7 @@ export interface Database {
           user_id: string;
           full_name: string | null;
           field: string | null;
-          language_preference: "english" | "spanish" | "asl";
+          language_preference: "english" | "spanish" | "arabic";
           created_at: string;
           updated_at: string;
         };
@@ -24,7 +24,7 @@ export interface Database {
           user_id: string;
           full_name?: string | null;
           field?: string | null;
-          language_preference?: "english" | "spanish" | "asl";
+          language_preference?: "english" | "spanish" | "arabic";
           created_at?: string;
           updated_at?: string;
         };
@@ -33,7 +33,7 @@ export interface Database {
           user_id?: string;
           full_name?: string | null;
           field?: string | null;
-          language_preference?: "english" | "spanish" | "asl";
+          language_preference?: "english" | "spanish" | "arabic";
           created_at?: string;
           updated_at?: string;
         };

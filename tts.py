@@ -11,8 +11,12 @@ import requests
 
 _URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
-# Rachel — works in English AND Spanish with the multilingual model
-_DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM"
+# Sarah — premade voice available on free ElevenLabs API plans
+_DEFAULT_VOICE = "EXAVITQu4vr4xnSDxMaL"
+# Use a premade voice by default so free API plans do not hit library-voice limits.
+_ARABIC_VOICE = os.getenv("ELEVENLABS_ARABIC_VOICE_ID", _DEFAULT_VOICE)
+
+_MULTILINGUAL_LANGS = {"spanish", "arabic"}
 
 
 def speak(text: str, language: str = "english") -> bytes | None:
@@ -20,10 +24,14 @@ def speak(text: str, language: str = "english") -> bytes | None:
     if not api_key:
         return None
 
-    voice_id = os.getenv("ELEVENLABS_VOICE_ID", _DEFAULT_VOICE)
+    lang = language.lower()
+    if lang == "arabic":
+        voice_id = _ARABIC_VOICE
+    else:
+        voice_id = os.getenv("ELEVENLABS_VOICE_ID", _DEFAULT_VOICE)
 
-    # eleven_multilingual_v2 handles Spanish (and other languages) natively
-    model_id = "eleven_multilingual_v2" if language.lower() == "spanish" else "eleven_turbo_v2"
+    # eleven_multilingual_v2 handles Spanish, Arabic, and other non-English languages
+    model_id = "eleven_multilingual_v2" if lang in _MULTILINGUAL_LANGS else "eleven_turbo_v2"
 
     try:
         response = requests.post(

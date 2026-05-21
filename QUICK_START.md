@@ -28,11 +28,20 @@ Quick version:
 All environment variables are in the **root `.env` file** (already configured):
 
 ```env
-RAG_API=your_groq_key
+LLM_PROVIDER=huggingface
+LLM_API_BASE=https://router.huggingface.co/v1
+LLM_MODEL=Qwen/Qwen2.5-7B-Instruct:fastest
+LLM_API_KEY=your_huggingface_token
 ELEVEN_API=your_elevenlabs_key
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
 NEXT_PUBLIC_API_URL=http://localhost:8000
+MONGODB_URI=your_mongodb_atlas_uri
+MONGODB_DB=smart_interview
+S3_BUCKET=your_recordings_bucket
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=your_access_key
+S3_SECRET_ACCESS_KEY=your_secret_key
 ```
 
 The frontend automatically reads `NEXT_PUBLIC_*` variables from this file.
@@ -65,7 +74,6 @@ The frontend is **complete** and waiting for backend integration. See **`INTEGRA
    - `POST /parse-resume` - Use existing `rag/parser.py`
    - `POST /generate-questions` - Use `rag/interviewer.py` + behavioral questions
    - `POST /interview/process` - Add ElevenLabs TTS
-   - `WebSocket /asl/recognize` - Connect ASL classifier
 
 3. **Start backend**:
 ```bash
@@ -121,11 +129,6 @@ smart_interview/
 │   ├── vectorstore.py
 │   └── interviewer.py
 │
-├── asl/                     # 🔄 Existing ASL recognition
-│   ├── detector.py
-│   ├── classifier.py
-│   └── buffer.py
-│
 ├── data/                    # 🔄 Behavioral questions
 │   └── behavioral_questions.json
 │
@@ -138,11 +141,20 @@ smart_interview/
 **All environment variables are in the root `.env` file:**
 
 ```env
-RAG_API=your_groq_api_key
+LLM_PROVIDER=huggingface
+LLM_API_BASE=https://router.huggingface.co/v1
+LLM_MODEL=Qwen/Qwen2.5-7B-Instruct:fastest
+LLM_API_KEY=your_huggingface_token
 ELEVEN_API=your_elevenlabs_api_key
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 NEXT_PUBLIC_API_URL=http://localhost:8000
+MONGODB_URI=your_mongodb_atlas_uri
+MONGODB_DB=smart_interview
+S3_BUCKET=your_recordings_bucket
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=your_access_key
+S3_SECRET_ACCESS_KEY=your_secret_key
 ```
 
 Both frontend and backend read from this single file.
@@ -215,7 +227,6 @@ Update `NEXT_PUBLIC_API_URL` to production backend URL.
 You're on the `ui` branch. The frontend is production-ready and waiting for:
 - Backend API implementation
 - ElevenLabs TTS integration
-- ASL recognition WebSocket
 - Behavioral questions loading
 
 **The UI is done. Time for your teammates to connect the backend!** 🚀

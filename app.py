@@ -19,7 +19,7 @@ for key, default in {
     "q_index": 0,
     "history": [],          # list of {"role": "interviewer"|"candidate", "text": str}
     "collection": None,
-    "groq": None,
+    "llm": None,
     "awaiting_followup": False,
     "followup_q": "",
 }.items():
@@ -45,8 +45,8 @@ if not st.session_state.questions:
                 st.stop()
 
             st.session_state.collection = build_vectorstore(chunks)
-            st.session_state.groq = get_client()
-            st.session_state.questions = generate_questions(chunks, st.session_state.groq)
+            st.session_state.llm = get_client()
+            st.session_state.questions = generate_questions(chunks, st.session_state.llm)
 
         st.rerun()
 
@@ -71,7 +71,7 @@ for msg in st.session_state.history:
 if idx >= total:
     st.success("That's a wrap! Great practice session.")
     if st.button("Start over"):
-        for k in ["questions", "q_index", "history", "collection", "groq",
+        for k in ["questions", "q_index", "history", "collection", "llm",
                   "awaiting_followup", "followup_q"]:
             del st.session_state[k]
         st.rerun()
@@ -100,7 +100,7 @@ if answer:
 
     if not st.session_state.awaiting_followup:
         # Generate one follow-up, then move on after that is answered
-        followup = generate_followup(current_q, answer, context, st.session_state.groq)
+        followup = generate_followup(current_q, answer, context, st.session_state.llm)
         st.session_state.followup_q = followup
         st.session_state.awaiting_followup = True
     else:
@@ -115,7 +115,7 @@ if answer:
 with st.sidebar:
     st.header("Session")
     if st.button("Upload new resume"):
-        for k in ["questions", "q_index", "history", "collection", "groq",
+        for k in ["questions", "q_index", "history", "collection", "llm",
                   "awaiting_followup", "followup_q"]:
             del st.session_state[k]
         st.rerun()

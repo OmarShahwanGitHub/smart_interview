@@ -4,12 +4,12 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Mic, MicOff, Send, Video, Volume2 } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, Send, Volume2 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-type Language = "english" | "spanish" | "asl";
+type Language = "english" | "spanish" | "arabic";
 type Phase = "loading" | "generating" | "interviewing" | "done";
 type Mode = "technical" | "behavioral";
 
@@ -37,18 +37,24 @@ declare global {
 
 export default function InterviewPage() {
   const router = useRouter();
-  const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
-  const syncedAslTextRef = useRef("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<BlobPart[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const activeRecordingTurnRef = useRef<{
+    turnId: string;
+    question: string;
+    mode: Mode;
+    questionIndex: number;
+  } | null>(null);
   const sessionId = useRef<string>("");
-  const aslSessionId = useRef<string>("");
-  const aslIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const userIdRef = useRef<string>("");
+  const resumeIdRef = useRef<string>("");
+  const answerRef = useRef("");
 
   const [language, setLanguage] = useState<Language>("english");
   const languageRef = useRef<Language>("english");
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [camGranted, setCamGranted] = useState(false);
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -66,11 +72,51 @@ export default function InterviewPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [recordingConsent, setRecordingConsent] = useState(false);
+  const [recordingUploadStatus, setRecordingUploadStatus] = useState<"idle" | "uploading" | "saved" | "failed">("idle");
 
-  const [aslText, setAslText] = useState("");
-  const [aslConfidence, setAslConfidence] = useState(0);
-  const [aslLastSign, setAslLastSign] = useState("");
-  const [isAslProcessing, setIsAslProcessing] = useState(false);
+  useEffect(() => {
+    answerRef.current = answer;
+  }, [answer]);
+
+  const getQuestionIndex = useCallback(
+    () => (mode === "technical" ? techIndex : behavIndex),
+    [behavIndex, mode, techIndex]
+  );
+
+  const getTurnId = useCallback(
+    (suffix = inFollowup ? "followup" : "main") =>
+      `${sessionId.current}_${mode}_${getQuestionIndex()}_${suffix}`,
+    [getQuestionIndex, inFollowup, mode]
+  );
+
+  const uploadAnswerRecording = useCallback(async (blob: Blob, turnMeta: NonNullable<typeof activeRecordingTurnRef.current>) => {
+    if (!blob.size) return;
+
+    setRecordingUploadStatus("uploading");
+
+    const formData = new FormData();
+    formData.append("file", blob, `answer-${turnMeta.turnId}.webm`);
+    formData.append("session_id", sessionId.current);
+    formData.append("kind", "answer");
+    formData.append("turn_id", turnMeta.turnId);
+    formData.append("question", turnMeta.question);
+    formData.append("mode", turnMeta.mode);
+    formData.append("question_index", String(turnMeta.questionIndex));
+    formData.append("text", answerRef.current);
+    if (userIdRef.current) formData.append("user_id", userIdRef.current);
+    if (resumeIdRef.current) formData.append("resume_id", resumeIdRef.current);
+
+    try {
+      const res = await fetch("/api/interview/recording", {
+        method: "POST",
+        body: formData,
+      });
+      setRecordingUploadStatus(res.ok ? "saved" : "failed");
+    } catch {
+      setRecordingUploadStatus("failed");
+    }
+  }, []);
 
   const playAudio = useCallback((b64: string) => {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -82,15 +128,27 @@ export default function InterviewPage() {
   }, []);
 
   const speak = useCallback(
-    async (text: string) => {
-      if (languageRef.current === "asl" || !text) return;
+    async (
+      text: string,
+      options: { persist?: boolean; turnId?: string; kind?: "question" | "followup_question" } = {}
+    ) => {
+      if (!text) return;
       setIsSpeaking(true);
 
       try {
         const res = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, language: languageRef.current }),
+          body: JSON.stringify({
+            text,
+            language: languageRef.current,
+            session_id: sessionId.current,
+            user_id: userIdRef.current,
+            resume_id: resumeIdRef.current,
+            turn_id: options.turnId,
+            kind: options.kind || "question",
+            persist: Boolean(options.persist),
+          }),
         });
 
         if (res.ok) {
@@ -109,17 +167,68 @@ export default function InterviewPage() {
     [playAudio]
   );
 
-  const startRecording = useCallback(() => {
+  const questions = mode === "technical" ? technicalQs : behavioralQs;
+  const index = mode === "technical" ? techIndex : behavIndex;
+  const setIndex = mode === "technical" ? setTechIndex : setBehavIndex;
+  const currentQuestion = questions[index] ?? null;
+  const isDone = phase === "interviewing" && index >= questions.length && !inFollowup;
+
+  const startRecording = useCallback(async () => {
+    if (!recordingConsent) {
+      alert("Please confirm recording consent before recording an answer.");
+      return;
+    }
+
+    const question = inFollowup && followup ? followup : currentQuestion;
+    if (!question) return;
+
+    activeRecordingTurnRef.current = {
+      turnId: getTurnId(),
+      question,
+      mode,
+      questionIndex: getQuestionIndex(),
+    };
+    recordingChunksRef.current = [];
+    setRecordingUploadStatus("idle");
+
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStreamRef.current = mediaStream;
+      const recorder = new MediaRecorder(mediaStream);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const mimeType = recorder.mimeType || "audio/webm";
+        const blob = new Blob(recordingChunksRef.current, { type: mimeType });
+        const turnMeta = activeRecordingTurnRef.current;
+        recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        if (turnMeta) {
+          void uploadAnswerRecording(blob, turnMeta);
+        }
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+    } catch {
+      alert("Microphone access failed. Check browser permissions and try again.");
+      return;
+    }
+
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      alert("Speech recognition is not supported in this browser.");
+      alert("Speech recognition is not supported in this browser, but your audio is still being recorded.");
+      setIsRecording(true);
       return;
     }
 
     const rec = new SR();
     rec.continuous = false;
     rec.interimResults = true;
-    rec.lang = languageRef.current === "spanish" ? "es-ES" : "en-US";
+    rec.lang =
+      languageRef.current === "spanish" ? "es-ES" :
+      languageRef.current === "arabic"  ? "ar-SA" : "en-US";
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
       const transcript = Array.from(e.results)
@@ -127,94 +236,39 @@ export default function InterviewPage() {
         .join("");
       setAnswer(transcript);
     };
-    rec.onerror = () => setIsRecording(false);
-    rec.onend = () => setIsRecording(false);
+    rec.onerror = () => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+    };
+    rec.onend = () => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+    };
 
     rec.start();
     recognitionRef.current = rec;
     setIsRecording(true);
-  }, []);
+  }, [
+    currentQuestion,
+    followup,
+    getQuestionIndex,
+    getTurnId,
+    inFollowup,
+    mode,
+    recordingConsent,
+    uploadAnswerRecording,
+  ]);
 
   const stopRecording = useCallback(() => {
     recognitionRef.current?.stop();
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
     setIsRecording(false);
-  }, []);
-
-  const startAslProcessing = useCallback(async () => {
-    if (!videoRef.current || !camGranted) {
-      return;
-    }
-
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      await fetch(`${apiUrl}/asl/reset?session_id=${aslSessionId.current}`, {
-        method: "POST",
-      });
-    } catch {
-      // Non-blocking.
-    }
-
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    canvas.width = 320;
-    canvas.height = 240;
-
-    const processFrame = async () => {
-      if (!videoRef.current) return;
-
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const frameData = canvas.toDataURL("image/jpeg", 0.8);
-
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const res = await fetch(`${apiUrl}/asl/process-frame`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            session_id: aslSessionId.current,
-            frame: frameData,
-            width: canvas.width,
-            height: canvas.height,
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setAslText(data.buffer || "");
-          setAslConfidence(data.confidence || 0);
-          setAslLastSign(data.last_sign || "");
-        }
-      } catch {
-        // Non-blocking.
-      }
-    };
-
-    aslIntervalRef.current = setInterval(processFrame, 100);
-    setIsAslProcessing(true);
-  }, [camGranted]);
-
-  const stopAslProcessing = useCallback(() => {
-    if (aslIntervalRef.current) {
-      clearInterval(aslIntervalRef.current);
-      aslIntervalRef.current = null;
-    }
-    setIsAslProcessing(false);
-  }, []);
-
-  const resetAslBuffer = useCallback(async () => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      await fetch(`${apiUrl}/asl/reset?session_id=${aslSessionId.current}`, {
-        method: "POST",
-      });
-      setAslText("");
-      setAslLastSign("");
-      setAslConfidence(0);
-    } catch {
-      // Non-blocking.
-    }
   }, []);
 
   useEffect(() => {
@@ -225,9 +279,6 @@ export default function InterviewPage() {
     if (!sessionId.current) {
       sessionId.current = `session_${Date.now()}`;
     }
-    if (!aslSessionId.current) {
-      aslSessionId.current = `asl_${Date.now()}`;
-    }
   }, []);
 
   useEffect(() => {
@@ -237,9 +288,14 @@ export default function InterviewPage() {
         router.push("/login");
         return;
       }
+      userIdRef.current = user.id;
 
       const rawChunks = localStorage.getItem("interview_chunks");
-      const lang = (localStorage.getItem("interview_language") as Language) || "english";
+      const resumeId = localStorage.getItem("interview_resume_id") || "";
+      resumeIdRef.current = resumeId;
+      const savedLanguage = localStorage.getItem("interview_language");
+      const lang: Language =
+        savedLanguage === "spanish" || savedLanguage === "arabic" ? savedLanguage : "english";
       languageRef.current = lang;
       setLanguage(lang);
 
@@ -254,7 +310,12 @@ export default function InterviewPage() {
       fetch(`${apiUrl}/interview/init-session?session_id=${sessionId.current}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(chunks),
+        body: JSON.stringify({
+          chunks,
+          user_id: user.id,
+          resume_id: resumeId,
+          language: lang,
+        }),
       }).catch(() => null);
 
       setPhase("generating");
@@ -279,98 +340,27 @@ export default function InterviewPage() {
       setTechnicalQs(technical_questions);
       setBehavioralQs(behavioralStrings);
       setPhase("interviewing");
-      setTimeout(() => speak(technical_questions[0]), 500);
     };
 
     init();
   }, [router, speak]);
 
-  const questions = mode === "technical" ? technicalQs : behavioralQs;
-  const index = mode === "technical" ? techIndex : behavIndex;
-  const setIndex = mode === "technical" ? setTechIndex : setBehavIndex;
-  const currentQuestion = questions[index] ?? null;
-  const isDone = phase === "interviewing" && index >= questions.length && !inFollowup;
-
   useEffect(() => {
     if (phase !== "interviewing") return;
     const question = inFollowup ? followup : currentQuestion;
-    if (question) speak(question);
-  }, [techIndex, behavIndex, mode, inFollowup, followup, phase, currentQuestion, speak]);
-
-  const startCamera = async () => {
-    try {
-      const media = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480 },
+    if (question) {
+      speak(question, {
+        persist: true,
+        turnId: getTurnId(),
+        kind: inFollowup ? "followup_question" : "question",
       });
-      setStream(media);
-      setCamGranted(true);
-
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = media;
-          videoRef.current.play().catch(() => null);
-        }
-      }, 100);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      alert(`Camera access failed: ${message}`);
-      setCamGranted(false);
     }
-  };
-
-  const stopMedia = useCallback(() => {
-    stream?.getTracks().forEach((track) => track.stop());
-    setStream(null);
-    setCamGranted(false);
-    stopAslProcessing();
-  }, [stream, stopAslProcessing]);
-
-  useEffect(() => {
-    return () => {
-      stream?.getTracks().forEach((track) => track.stop());
-    };
-  }, [stream]);
-
-  useEffect(() => {
-    if (language === "asl" && camGranted && !isAslProcessing) {
-      startAslProcessing();
-    } else if ((language !== "asl" || !camGranted) && isAslProcessing) {
-      stopAslProcessing();
-    }
-  }, [language, camGranted, isAslProcessing, startAslProcessing, stopAslProcessing]);
-
-  useEffect(() => {
-    if (language !== "asl") {
-      syncedAslTextRef.current = "";
-      return;
-    }
-
-    setAnswer((previousAnswer) => {
-      const previousSyncedText = syncedAslTextRef.current;
-      const trimmedAnswer = previousAnswer.trimEnd();
-
-      if (previousSyncedText && trimmedAnswer.endsWith(previousSyncedText)) {
-        const prefix = trimmedAnswer.slice(0, trimmedAnswer.length - previousSyncedText.length).trimEnd();
-        syncedAslTextRef.current = aslText;
-        return aslText ? `${prefix ? `${prefix} ` : ""}${aslText}` : prefix;
-      }
-
-      if (!previousSyncedText) {
-        syncedAslTextRef.current = aslText;
-        return aslText ? `${trimmedAnswer ? `${trimmedAnswer} ` : ""}${aslText}` : previousAnswer;
-      }
-
-      syncedAslTextRef.current = aslText;
-      return previousAnswer;
-    });
-  }, [aslText, language]);
+  }, [techIndex, behavIndex, mode, inFollowup, followup, phase, currentQuestion, speak, getTurnId]);
 
   const advance = useCallback(() => {
     setFollowup(null);
     setInFollowup(false);
     setAnswer("");
-    setAslText("");
-    syncedAslTextRef.current = "";
     setIndex((current) => current + 1);
   }, [setIndex]);
 
@@ -379,12 +369,6 @@ export default function InterviewPage() {
     setFollowup(null);
     setInFollowup(false);
     setAnswer("");
-
-    const nextQuestions = nextMode === "technical" ? technicalQs : behavioralQs;
-    const nextIndex = nextMode === "technical" ? techIndex : behavIndex;
-    setTimeout(() => {
-      if (nextQuestions[nextIndex]) speak(nextQuestions[nextIndex]);
-    }, 300);
   };
 
   const handleSubmit = async () => {
@@ -392,6 +376,8 @@ export default function InterviewPage() {
     setIsSubmitting(true);
 
     const question = inFollowup && followup ? followup : currentQuestion;
+    const turnId = getTurnId();
+    const questionIndex = getQuestionIndex();
 
     try {
       const res = await fetch("/api/interview", {
@@ -402,6 +388,11 @@ export default function InterviewPage() {
           question,
           answer,
           language,
+          user_id: userIdRef.current,
+          resume_id: resumeIdRef.current,
+          turn_id: turnId,
+          mode,
+          question_index: questionIndex,
         }),
       });
 
@@ -412,7 +403,7 @@ export default function InterviewPage() {
         } else {
           setFollowup(data.followup_question);
           setInFollowup(true);
-          if (data.audio_base64) playAudio(data.audio_base64);
+          // useEffect handles speaking the follow-up — no double playAudio here
         }
       } else {
         advance();
@@ -436,14 +427,13 @@ export default function InterviewPage() {
             </h1>
             <p className="mt-4 max-w-2xl text-lg leading-8 text-muted-foreground">
               Move through technical and behavioral questions with voice playback,
-              optional speech-to-text, and ASL camera support when needed.
+              optional speech-to-text, and a focused answer workspace.
             </p>
           </div>
 
           <Button
             variant="outline"
             onClick={() => {
-              stopMedia();
               router.push("/dashboard");
             }}
             className="h-12 rounded-2xl border-border/70 bg-transparent px-5 text-foreground hover:bg-accent"
@@ -586,7 +576,7 @@ export default function InterviewPage() {
                       <CardTitle className="flex-1 text-2xl leading-tight text-foreground">
                         {inFollowup ? followup : currentQuestion}
                       </CardTitle>
-                      {language !== "asl" && currentQuestion && (
+                      {currentQuestion && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -620,25 +610,33 @@ export default function InterviewPage() {
                     />
 
                     <div className="flex flex-wrap items-center gap-3">
-                      {language !== "asl" && (
-                        <Button
-                          variant={isRecording ? "destructive" : "outline"}
-                          onClick={isRecording ? stopRecording : startRecording}
-                          className="h-11 rounded-2xl border-border/70 bg-transparent px-4 text-foreground hover:bg-accent"
-                        >
-                          {isRecording ? (
-                            <>
-                              <MicOff className="mr-2 h-4 w-4" />
-                              Stop Recording
-                            </>
-                          ) : (
-                            <>
-                              <Mic className="mr-2 h-4 w-4" />
-                              Record Answer
-                            </>
-                          )}
-                        </Button>
-                      )}
+                      <label className="flex min-h-11 items-center gap-2 rounded-2xl border border-border/70 bg-background/60 px-3 text-sm text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={recordingConsent}
+                          onChange={(event) => setRecordingConsent(event.target.checked)}
+                          className="h-4 w-4 accent-primary"
+                        />
+                        Save answer audio
+                      </label>
+
+                      <Button
+                        variant={isRecording ? "destructive" : "outline"}
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className="h-11 rounded-2xl border-border/70 bg-transparent px-4 text-foreground hover:bg-accent"
+                      >
+                        {isRecording ? (
+                          <>
+                            <MicOff className="mr-2 h-4 w-4" />
+                            Stop Recording
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="mr-2 h-4 w-4" />
+                            Record Answer
+                          </>
+                        )}
+                      </Button>
 
                       <Button
                         variant="ghost"
@@ -660,7 +658,18 @@ export default function InterviewPage() {
 
                     {isRecording && (
                       <p className="text-sm text-primary">
-                        Recording is active. Speak naturally and we&apos;ll fill the answer box.
+                        Recording is active. Speak naturally and we&apos;ll save the audio with this answer.
+                      </p>
+                    )}
+                    {recordingUploadStatus === "uploading" && (
+                      <p className="text-sm text-muted-foreground">Saving answer audio...</p>
+                    )}
+                    {recordingUploadStatus === "saved" && (
+                      <p className="text-sm text-primary">Answer audio saved.</p>
+                    )}
+                    {recordingUploadStatus === "failed" && (
+                      <p className="text-sm text-red-200">
+                        Answer text was kept, but audio upload failed. Check S3 settings.
                       </p>
                     )}
                   </CardContent>
@@ -668,90 +677,6 @@ export default function InterviewPage() {
               </div>
 
               <div className="space-y-6">
-                {(language === "asl" || camGranted) && (
-                  <Card className="panel-surface rounded-[32px]">
-                    <CardHeader>
-                      <CardTitle className="text-foreground">ASL Recognition</CardTitle>
-                      <CardDescription className="leading-7 text-muted-foreground">
-                        Sign into the camera and add recognized text into your answer when it looks right.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {!camGranted ? (
-                        <Button
-                          className="h-12 w-full rounded-2xl bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
-                          onClick={startCamera}
-                        >
-                          <Video className="mr-2 h-5 w-5" />
-                          Enable Camera for ASL
-                        </Button>
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="relative overflow-hidden rounded-[24px] border border-border/70 bg-black">
-                            <video
-                              ref={videoRef}
-                              autoPlay
-                              playsInline
-                              muted
-                              width={640}
-                              height={480}
-                              className="aspect-video h-auto w-full object-cover"
-                              style={{ display: "block", backgroundColor: "#000" }}
-                            />
-                            <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                              <span
-                                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
-                                  isAslProcessing
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-red-400/90 text-white"
-                                }`}
-                              >
-                                <span
-                                  className={`h-2 w-2 rounded-full ${
-                                    isAslProcessing ? "animate-pulse bg-white" : "bg-red-200"
-                                  }`}
-                                />
-                                {isAslProcessing ? "Processing" : "Inactive"}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="rounded-[16px] border border-border/70 bg-background/75 p-4">
-                            <div className="mb-2 flex items-center justify-between">
-                              <span className="text-sm font-medium text-foreground">Recognized Text</span>
-                              <span className="text-xs text-muted-foreground">
-                                Confidence: {Math.round(aslConfidence * 100)}%
-                              </span>
-                            </div>
-                            <div className="min-h-[60px] rounded bg-secondary p-3 text-lg font-mono text-primary">
-                              {aslText || <span className="text-muted-foreground">Start signing...</span>}
-                            </div>
-                            {aslLastSign && (
-                              <div className="mt-2 text-xs text-muted-foreground">
-                                Last sign: <span className="font-medium text-primary">{aslLastSign}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={resetAslBuffer}
-                              className="flex-1 rounded-xl border-border/70 bg-transparent text-foreground hover:bg-accent"
-                            >
-                              Clear Text
-                            </Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Recognized ASL text now syncs into your answer box automatically.
-                          </p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-
                 <Card className="panel-surface rounded-[32px]">
                   <CardHeader>
                     <CardTitle className="text-foreground">Session guide</CardTitle>

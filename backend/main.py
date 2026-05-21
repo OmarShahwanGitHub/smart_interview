@@ -5,7 +5,6 @@ Endpoints:
 - POST /parse-resume: Parse resume PDF and extract fields
 - POST /generate-questions: Generate technical + behavioral questions
 - POST /interview/process: Process answer and generate follow-up with TTS
-- WS   /asl/recognize: ASL classifier (landmarks from browser MediaPipe GPU)
 - POST /screen-resume: ML-based resume screening
 - POST /tts: Text-to-speech via ElevenLabs
 """
@@ -17,16 +16,11 @@ import json
 import pickle
 import tempfile
 import base64
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
+import uuid
 from pathlib import Path
 from typing import List, Dict, Optional
-import numpy as np
-import cv2
 
-_asl_executor = ThreadPoolExecutor(max_workers=2)
-
-from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -37,9 +31,7 @@ from rag.parser import parse_resume
 from rag.vectorstore import build_vectorstore, query as query_vectorstore
 from rag.interviewer import get_client, generate_questions, generate_followup, translate_questions
 from tts import speak
-from asl.detector import HandDetector
-from asl.classifier import SignClassifier as GestureClassifier
-from asl.buffer import SignBuffer as LetterBuffer
+from backend.storage import insert_one, object_key, s3_enabled, upload_bytes_to_s3, upsert_one, utc_now
 
 load_dotenv()
 
@@ -85,6 +77,7 @@ _screening_models = _load_screening_models()
 class ParsedResume(BaseModel):
     fields: Dict[str, str]
     chunks: List[Dict[str, str]]
+    resume_id: Optional[str] = None
 
 class GenerateQuestionsRequest(BaseModel):
     chunks: List[Dict[str, str]]
@@ -99,17 +92,37 @@ class ProcessAnswerRequest(BaseModel):
     question: str
     answer: str
     language: str = "english"
+    user_id: Optional[str] = None
+    resume_id: Optional[str] = None
+    turn_id: Optional[str] = None
+    mode: Optional[str] = None
+    question_index: Optional[int] = None
 
 class ProcessAnswerResponse(BaseModel):
     followup_question: Optional[str]
     audio_base64: Optional[str]  # Base64 encoded MP3 audio
+    turn_id: Optional[str] = None
+
+class InitSessionRequest(BaseModel):
+    chunks: List[Dict]
+    user_id: Optional[str] = None
+    resume_id: Optional[str] = None
+    language: str = "english"
+
+class AudioUploadResponse(BaseModel):
+    recording_id: Optional[str]
+    storage_key: str
+    storage_url: str
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Endpoint 1: Parse Resume
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.post("/parse-resume", response_model=ParsedResume)
-async def parse_resume_endpoint(file: UploadFile = File(...)):
+async def parse_resume_endpoint(
+    file: UploadFile = File(...),
+    user_id: Optional[str] = Form(None),
+):
     """
     Parse uploaded resume PDF and extract structured fields.
     Returns detected fields (name, email, etc.) and text chunks for RAG.
@@ -136,8 +149,17 @@ async def parse_resume_endpoint(file: UploadFile = File(...)):
 
         # Extract basic fields from chunks
         fields = extract_fields_from_chunks(chunks)
+        resume_id = await insert_one("resumes", {
+            "user_id": user_id,
+            "original_filename": file.filename,
+            "content_type": file.content_type,
+            "size_bytes": len(content),
+            "parsed_fields": fields,
+            "chunks": chunks,
+            "source": "parse-resume",
+        })
 
-        return ParsedResume(fields=fields, chunks=chunks)
+        return ParsedResume(fields=fields, chunks=chunks, resume_id=resume_id)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error parsing resume: {str(e)}")
@@ -211,11 +233,11 @@ async def generate_questions_endpoint(request: GenerateQuestionsRequest):
     Behavioral questions are loaded from data/behavioral_questions.json.
     """
     try:
-        groq_client = get_client()
+        llm_client = get_client()
         language = request.language.lower()
 
         # Generate technical questions in the requested language
-        technical_qs = generate_questions(request.chunks, groq_client, language=language)
+        technical_qs = generate_questions(request.chunks, llm_client, language=language)
 
         # Load and sample behavioral questions
         behavioral_path = Path(__file__).parent.parent / "data" / "behavioral_questions.json"
@@ -227,7 +249,7 @@ async def generate_questions_endpoint(request: GenerateQuestionsRequest):
 
         # Translate behavioral questions if not English
         if language != "english":
-            behavioral_texts = translate_questions(behavioral_texts, groq_client, target_language=language)
+            behavioral_texts = translate_questions(behavioral_texts, llm_client, target_language=language)
 
         # Return behavioral questions as plain strings (already translated)
         behavioral_qs = [{"id": i, "question": q, "category": sampled[i].get("category", ""), "difficulty": sampled[i].get("difficulty", "")}
@@ -250,14 +272,14 @@ async def generate_questions_endpoint(request: GenerateQuestionsRequest):
 async def process_answer_endpoint(request: ProcessAnswerRequest):
     """
     Process candidate's answer and generate follow-up question.
-    Includes TTS audio generation for voice/ASL modes.
+    Includes TTS audio generation for voice modes.
     """
     try:
         # Get or create session
         if request.session_id not in interview_sessions:
             interview_sessions[request.session_id] = {
                 "collection": None,
-                "groq": get_client()
+                "llm": get_client()
             }
 
         session = interview_sessions[request.session_id]
@@ -275,20 +297,50 @@ async def process_answer_endpoint(request: ProcessAnswerRequest):
             request.question,
             request.answer,
             context,
-            session["groq"],
+            session["llm"],
             language=request.language,
         )
 
-        # Generate TTS audio if language is not ASL
         audio_base64 = None
-        if request.language.lower() != "asl":
-            audio_bytes = speak(followup, language=request.language)
-            if audio_bytes:
-                audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        audio_bytes = speak(followup, language=request.language)
+        if audio_bytes:
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+        turn_id = request.turn_id or str(uuid.uuid4())
+        await upsert_one(
+            "interview_turns",
+            {"turn_id": turn_id},
+            {
+                "turn_id": turn_id,
+                "session_id": request.session_id,
+                "user_id": request.user_id,
+                "resume_id": request.resume_id,
+                "mode": request.mode,
+                "question_index": request.question_index,
+                "question": request.question,
+                "answer_text": request.answer,
+                "followup_question": followup,
+                "language": request.language,
+            },
+        )
+
+        if audio_bytes and s3_enabled():
+            await save_recording_bytes(
+                data=audio_bytes,
+                filename="followup.mp3",
+                content_type="audio/mpeg",
+                session_id=request.session_id,
+                user_id=request.user_id,
+                resume_id=request.resume_id,
+                turn_id=turn_id,
+                kind="followup_question",
+                text=followup,
+            )
 
         return ProcessAnswerResponse(
             followup_question=followup,
-            audio_base64=audio_base64
+            audio_base64=audio_base64,
+            turn_id=turn_id,
         )
 
     except Exception as e:
@@ -296,144 +348,46 @@ async def process_answer_endpoint(request: ProcessAnswerRequest):
 
 
 @app.post("/interview/init-session")
-async def init_interview_session(session_id: str, chunks: List[Dict]):
+async def init_interview_session(session_id: str, request: InitSessionRequest):
     """
     Initialize an interview session with resume chunks for context retrieval.
     """
     try:
-        collection = build_vectorstore(chunks)
+        collection = build_vectorstore(request.chunks)
         interview_sessions[session_id] = {
             "collection": collection,
-            "groq": get_client()
+            "llm": get_client()
         }
+        await upsert_one(
+            "interview_sessions",
+            {"session_id": session_id},
+            {
+                "session_id": session_id,
+                "user_id": request.user_id,
+                "resume_id": request.resume_id,
+                "language": request.language,
+                "status": "active",
+                "started_at": utc_now(),
+            },
+        )
         return {"status": "success", "session_id": session_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error initializing session: {str(e)}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ASL Session Manager - Real-time Webcam Processing
-# ═══════════════════════════════════════════════════════════════════════════
-
-class ASLSession:
-    """Real-time ASL sign recognition session (like asl_interview.py ASLProcessor)"""
-    def __init__(self):
-        self.detector = HandDetector(max_hands=1)
-        self.classifier = GestureClassifier()
-        self.buffer = LetterBuffer()
-        self.frame_count = 0
-
-    def process_frame(self, frame_bgr: np.ndarray) -> dict:
-        """Process a single frame and return sign detection results"""
-        features, annotated = self.detector.extract(frame_bgr)
-        letter, confidence = None, 0.0
-        
-        if features is not None:
-            letter, confidence = self.classifier.predict(features)
-            self.buffer.push(letter, confidence)
-
-        # Encode annotated frame every 3 frames for performance
-        annotated_b64 = None
-        self.frame_count += 1
-        if self.frame_count % 3 == 0:
-            _, buf_img = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 60])
-            annotated_b64 = base64.b64encode(buf_img).decode("utf-8")
-
-        return {
-            "letter": letter,
-            "confidence": float(confidence) if confidence else 0.0,
-            "buffer": self.buffer.text,
-            "last_sign": self.buffer.last_sign,
-            "annotated_frame": annotated_b64,
-        }
-
-    def reset(self):
-        """Clear the buffer"""
-        self.buffer.reset()
-        self.frame_count = 0
-
-    def close(self):
-        """Cleanup resources"""
-        self.detector.close()
-
-
-# Global session storage
-_asl_sessions: Dict[str, ASLSession] = {}
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Endpoint 4: ASL Real-time Frame Processing
-# ═══════════════════════════════════════════════════════════════════════════
-
-class ASLFrameRequest(BaseModel):
-    session_id: str
-    frame: str  # base64 encoded frame
-    width: int = 320
-    height: int = 240
-
-
-class ASLFrameResponse(BaseModel):
-    letter: Optional[str]
-    confidence: float
-    buffer: str
-    last_sign: str
-    annotated_frame: Optional[str]
-
-
-@app.post("/asl/process-frame", response_model=ASLFrameResponse)
-async def asl_process_frame(request: ASLFrameRequest):
-    """
-    Real-time ASL frame processing.
-    Accepts base64 video frame, detects hand landmarks, classifies sign.
-    """
-    try:
-        # Get or create ASL session
-        if request.session_id not in _asl_sessions:
-            _asl_sessions[request.session_id] = ASLSession()
-        
-        session = _asl_sessions[request.session_id]
-
-        # Decode frame
-        raw = request.frame.split(",")[1] if "," in request.frame else request.frame
-        frame_bytes = base64.b64decode(raw)
-        nparr = np.frombuffer(frame_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        frame = cv2.resize(frame, (request.width, request.height))
-
-        # Process frame in executor to avoid blocking
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(_asl_executor, session.process_frame, frame)
-
-        return ASLFrameResponse(**result)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ASL frame processing error: {str(e)}")
-
-
-@app.post("/asl/reset")
-async def asl_reset_session(session_id: str):
-    """Reset ASL session buffer"""
-    if session_id in _asl_sessions:
-        _asl_sessions[session_id].reset()
-    return {"status": "success", "session_id": session_id}
-
-
-@app.post("/asl/cleanup")
-async def asl_cleanup_session(session_id: str):
-    """Clean up ASL session resources"""
-    if session_id in _asl_sessions:
-        _asl_sessions[session_id].close()
-        del _asl_sessions[session_id]
-    return {"status": "success", "session_id": session_id}
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Endpoint 5: Text-to-Speech
+# Endpoint 4: Text-to-Speech
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TTSRequest(BaseModel):
     text: str
     language: str = "english"
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    resume_id: Optional[str] = None
+    turn_id: Optional[str] = None
+    kind: str = "question"
+    persist: bool = False
 
 
 @app.post("/tts")
@@ -449,11 +403,143 @@ async def tts_endpoint(request: TTSRequest):
     if audio_bytes is None:
         raise HTTPException(status_code=503, detail="TTS unavailable — check ELEVEN_API key")
 
-    return {"audio_base64": base64.b64encode(audio_bytes).decode("utf-8")}
+    recording = None
+    if request.persist and request.session_id and s3_enabled():
+        recording = await save_recording_bytes(
+            data=audio_bytes,
+            filename=f"{request.kind}.mp3",
+            content_type="audio/mpeg",
+            session_id=request.session_id,
+            user_id=request.user_id,
+            resume_id=request.resume_id,
+            turn_id=request.turn_id,
+            kind=request.kind,
+            text=request.text,
+        )
+
+    return {
+        "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
+        "recording": recording,
+    }
+
+
+async def save_recording_bytes(
+    *,
+    data: bytes,
+    filename: str,
+    content_type: str,
+    session_id: str,
+    kind: str,
+    user_id: Optional[str] = None,
+    resume_id: Optional[str] = None,
+    turn_id: Optional[str] = None,
+    text: Optional[str] = None,
+) -> dict:
+    key = object_key(f"interviews/{session_id}/{kind}", filename)
+    storage_url = await upload_bytes_to_s3(
+        data=data,
+        key=key,
+        content_type=content_type,
+        metadata={
+            "session_id": session_id,
+            "turn_id": turn_id or "",
+            "kind": kind,
+        },
+    )
+    recording_doc = {
+        "session_id": session_id,
+        "turn_id": turn_id,
+        "user_id": user_id,
+        "resume_id": resume_id,
+        "kind": kind,
+        "text": text,
+        "mime_type": content_type,
+        "size_bytes": len(data),
+        "storage_type": "s3",
+        "storage_key": key,
+        "storage_url": storage_url,
+    }
+    recording_id = await insert_one("recordings_metadata", recording_doc)
+
+    if turn_id:
+        update_field = f"recordings.{kind}"
+        await upsert_one(
+            "interview_turns",
+            {"turn_id": turn_id},
+            {
+                "turn_id": turn_id,
+                "session_id": session_id,
+                update_field: {
+                    "recording_id": recording_id,
+                    "storage_key": key,
+                    "storage_url": storage_url,
+                    "mime_type": content_type,
+                    "size_bytes": len(data),
+                },
+            },
+        )
+
+    return {
+        "recording_id": recording_id,
+        "storage_key": key,
+        "storage_url": storage_url,
+    }
+
+
+@app.post("/interview/recording", response_model=AudioUploadResponse)
+async def upload_interview_recording(
+    file: UploadFile = File(...),
+    session_id: str = Form(...),
+    kind: str = Form(...),
+    user_id: Optional[str] = Form(None),
+    resume_id: Optional[str] = Form(None),
+    turn_id: Optional[str] = Form(None),
+    text: Optional[str] = Form(None),
+    question: Optional[str] = Form(None),
+    mode: Optional[str] = Form(None),
+    question_index: Optional[int] = Form(None),
+):
+    if kind not in {"answer", "question", "followup_question", "full_session"}:
+        raise HTTPException(status_code=400, detail="Invalid recording kind")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Audio file is empty")
+
+    try:
+        recording = await save_recording_bytes(
+            data=data,
+            filename=file.filename or f"{kind}.webm",
+            content_type=file.content_type or "application/octet-stream",
+            session_id=session_id,
+            user_id=user_id,
+            resume_id=resume_id,
+            turn_id=turn_id,
+            kind=kind,
+            text=text,
+        )
+        if turn_id:
+            await upsert_one(
+                "interview_turns",
+                {"turn_id": turn_id},
+                {
+                    "turn_id": turn_id,
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "resume_id": resume_id,
+                    "mode": mode,
+                    "question_index": question_index,
+                    "question": question,
+                    "answer_text": text if kind == "answer" else None,
+                },
+            )
+        return AudioUploadResponse(**recording)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Endpoint 6: ElevenLabs Signed URL (for Conversational AI voice agent)
+# Endpoint 5: ElevenLabs Signed URL (for Conversational AI voice agent)
 # ═══════════════════════════════════════════════════════════════════════════
 
 @app.get("/elevenlabs/signed-url")
@@ -610,7 +696,7 @@ async def root():
             "POST /generate-questions",
             "POST /interview/process",
             "POST /interview/init-session",
-            "WS /asl/recognize"
+            "POST /interview/recording"
         ]
     }
 

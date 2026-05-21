@@ -17,7 +17,7 @@ export default function SetupPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [language, setLanguage] = useState<"english" | "spanish" | "asl">("english");
+  const [language, setLanguage] = useState<"english" | "spanish" | "arabic">("english");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export default function SetupPage() {
         throw new Error(body.error || "Backend could not parse the resume. Is it running?");
       }
 
-      const { chunks } = await res.json();
+      const { chunks, resume_id } = await res.json();
 
       if (!chunks || chunks.length === 0) {
         throw new Error("No content extracted from your resume. Try a different PDF.");
@@ -70,6 +70,9 @@ export default function SetupPage() {
 
       localStorage.setItem("interview_chunks", JSON.stringify(chunks));
       localStorage.setItem("interview_language", language);
+      if (resume_id) {
+        localStorage.setItem("interview_resume_id", resume_id);
+      }
 
       await supabase
         .from("profiles")
@@ -128,13 +131,13 @@ export default function SetupPage() {
                 id="language"
                 value={language}
                 onChange={(e) =>
-                  setLanguage(e.target.value as "english" | "spanish" | "asl")
+                  setLanguage(e.target.value as "english" | "spanish" | "arabic")
                 }
                 className="mt-3 h-12 rounded-2xl border-border/70 bg-background/70 text-foreground focus-visible:ring-primary"
               >
                 <option value="english">English (Voice)</option>
                 <option value="spanish">Spanish (Voice)</option>
-                <option value="asl">American Sign Language (Camera)</option>
+                <option value="arabic">Arabic (Voice)</option>
               </Select>
             </div>
 

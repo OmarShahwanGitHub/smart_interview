@@ -29,6 +29,7 @@ export default function DashboardLayout({
     await supabase.auth.signOut();
     localStorage.removeItem("interview_chunks");
     localStorage.removeItem("interview_language");
+    localStorage.removeItem("interview_resume_id");
     router.push("/");
   };
 

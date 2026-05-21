@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 const highlights = [
   "Resume-based technical and behavioral prompts",
   "Voice coaching with multilingual support",
-  "ASL-friendly practice flows for accessibility",
+  "Typed answers when speech is not convenient",
 ];
 
 export default function AuthLayout({

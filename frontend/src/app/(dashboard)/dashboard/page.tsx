@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Mic, ScanSearch, Upload, Video } from "lucide-react";
+import { ArrowRight, Mic, ScanSearch, Upload } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { AnimatedCard } from "@/components/ui/animated-card";
@@ -26,7 +26,9 @@ export default function DashboardPage() {
       setUserName(user.user_metadata?.full_name ?? user.email ?? null);
 
       const chunks = localStorage.getItem("interview_chunks");
-      const lang = localStorage.getItem("interview_language") || "english";
+      const savedLanguage = localStorage.getItem("interview_language");
+      const lang =
+        savedLanguage === "spanish" || savedLanguage === "arabic" ? savedLanguage : "english";
       setHasResume(Boolean(chunks));
       setLanguage(lang);
     });
@@ -35,15 +37,15 @@ export default function DashboardPage() {
   const languageLabel: Record<string, string> = {
     english: "English voice session",
     spanish: "Spanish voice session",
-    asl: "ASL camera session",
+    arabic: "Arabic voice session",
   };
 
   const nextSteps = hasResume
     ? [
         {
-          title: language === "asl" ? "Start ASL interview" : "Start interview",
+          title: "Start interview",
           copy: "Launch your practice session with your current resume and language settings.",
-          icon: language === "asl" ? Video : Mic,
+          icon: Mic,
           action: () => router.push("/interview"),
           primary: true,
         },
